@@ -1,0 +1,133 @@
+/*
+ * QuickNotes API client
+ * Talks to the JSONPlaceholder practice API (https://jsonplaceholder.typicode.com).
+ * All user-supplied or server-supplied text is inserted with textContent only,
+ * never innerHTML, so it cannot inject markup or scripts into the page.
+ */
+
+const API_URL = "https://jsonplaceholder.typicode.com/posts";
+const NOTES_LIMIT = 10;
+
+const loadBtn = document.getElementById("load-btn");
+const submitBtn = document.getElementById("submit-btn");
+const statusEl = document.getElementById("status");
+const notesList = document.getElementById("notes-list");
+
+/* ---------- Helpers ---------- */
+
+// type is one of: "loading", "success", "error" (each has its own CSS style)
+function setStatus(message, type) {
+  statusEl.textContent = message;
+  statusEl.className = type || "";
+}
+
+// Disable every button while a request is running so nothing is sent twice.
+function setBusy(isBusy) {
+  loadBtn.disabled = isBusy;
+  submitBtn.disabled = isBusy;
+  document.querySelectorAll(".delete-btn").forEach((btn) => {
+    btn.disabled = isBusy;
+  });
+}
+
+// Reusable request helper: calls fetch, checks response.ok, throws on errors.
+async function request(url, options = {}) {
+  const response = await fetch(url, options);
+
+  if (!response.ok) {
+    const error = new Error(`Server responded with status ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
+
+  let data = null;
+  try {
+    data = await response.json();
+  } catch (parseError) {
+    data = null; // some successful responses (e.g. DELETE) may have no useful body
+  }
+  return { data, status: response.status };
+}
+
+// Turn a technical error into a message a person can understand.
+function friendlyError(error, action) {
+  if (error.status) {
+    return `Could not ${action}: the server returned an error (status ${error.status}). Please try again.`;
+  }
+  return `Could not ${action}: please check your internet connection and try again.`;
+}
+
+/* ---------- Rendering ---------- */
+
+function showEmptyState() {
+  const item = document.createElement("li");
+  item.className = "empty-state";
+  item.textContent = 'No notes to show. Click "Load notes" or add one below.';
+  notesList.appendChild(item);
+}
+
+function removeEmptyState() {
+  const empty = notesList.querySelector(".empty-state");
+  if (empty) {
+    empty.remove();
+  }
+}
+
+function renderNote(note) {
+  const item = document.createElement("li");
+  item.dataset.id = note.id;
+
+  const title = document.createElement("h3");
+  title.className = "note-title";
+  title.textContent = note.title;
+
+  const body = document.createElement("p");
+  body.className = "note-body";
+  body.textContent = note.body;
+
+  item.append(title, body);
+  return item;
+}
+
+function renderNotes(notes) {
+  notesList.replaceChildren();
+
+  if (notes.length === 0) {
+    showEmptyState();
+    return;
+  }
+  notes.forEach((note) => notesList.appendChild(renderNote(note)));
+}
+
+/* ---------- GET: load notes ---------- */
+
+async function getNotes() {
+  const { data } = await request(`${API_URL}?_limit=${NOTES_LIMIT}`);
+  if (!Array.isArray(data)) {
+    throw new Error("Unexpected response from the server");
+  }
+  return data;
+}
+
+async function loadNotes() {
+  setBusy(true);
+  setStatus("Loading notes...", "loading");
+
+  try {
+    const notes = await getNotes();
+    renderNotes(notes);
+
+    if (notes.length === 0) {
+      setStatus("The server returned no notes.", "success");
+    } else {
+      const plural = notes.length === 1 ? "" : "s";
+      setStatus(`Loaded ${notes.length} note${plural} from the server.`, "success");
+    }
+  } catch (error) {
+    setStatus(friendlyError(error, "load notes"), "error");
+  } finally {
+    setBusy(false);
+  }
+}
+
+loadBtn.addEventListener("click", loadNotes);
