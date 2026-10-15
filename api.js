@@ -85,7 +85,14 @@ function renderNote(note) {
   body.className = "note-body";
   body.textContent = note.body;
 
-  item.append(title, body);
+  const deleteBtn = document.createElement("button");
+  deleteBtn.type = "button";
+  deleteBtn.className = "delete-btn";
+  deleteBtn.textContent = "Delete";
+  // Pass the <li> itself (not just the id) so we remove exactly this note.
+  deleteBtn.addEventListener("click", () => deleteNote(note, item));
+
+  item.append(title, body, deleteBtn);
   return item;
 }
 
@@ -178,6 +185,7 @@ async function createNote(event) {
     const { data, status } = await postNote({ title, body, userId: 1 });
 
     removeEmptyState();
+    createdInThisSession.add(data); // remember it was never really stored (see DELETE notes)
     notesList.prepend(renderNote(data)); // newest note goes to the top
     noteForm.reset();
     setStatus(`Note created (status ${status}, id ${data.id}).`, "success");
@@ -190,3 +198,52 @@ async function createNote(event) {
 }
 
 noteForm.addEventListener("submit", createNote);
+
+/* ---------- DELETE: remove a note ---------- */
+
+/*
+ * HOW DELETE WORKS WITH A FAKE API
+ * JSONPlaceholder does not really store anything. A POST returns a fake note
+ * (always id 101) and a DELETE replies "200 OK" without changing any data.
+ * That means:
+ *   1. We must NOT re-fetch the list after deleting: the server would simply
+ *      send the "deleted" note back. Instead, once the server confirms the
+ *      DELETE succeeded, the page itself removes the note, so the screen is
+ *      the source of truth for this session.
+ *   2. Notes created with POST never existed on the server. A real API would
+ *      answer 404 when we try to delete them, so a 404 for a note we created in
+ *      this session is treated as "already gone" and the note is removed.
+ *   3. Because every POST returns id 101, several created notes can share an
+ *      id. We therefore remove the exact <li> that was clicked, not "the note
+ *      with this id".
+ * With the real QuickNotes backend, the server would be the source of truth
+ * and the same code would work without these workarounds.
+ */
+const createdInThisSession = new WeakSet();
+
+async function deleteNoteRequest(id) {
+  return request(`${API_URL}/${id}`, { method: "DELETE" });
+}
+
+async function deleteNote(note, listItem) {
+  setBusy(true);
+  setStatus(`Deleting note ${note.id}...`, "loading");
+
+  try {
+    await deleteNoteRequest(note.id);
+    listItem.remove();
+    setStatus(`Note ${note.id} deleted.`, "success");
+  } catch (error) {
+    if (error.status === 404 && createdInThisSession.has(note)) {
+      listItem.remove(); // never stored on the server, so it is already gone
+      setStatus(`Note ${note.id} removed (it only existed in this page).`, "success");
+    } else {
+      setStatus(friendlyError(error, `delete note ${note.id}`), "error");
+    }
+  } finally {
+    setBusy(false);
+    if (notesList.children.length === 0) {
+      showEmptyState();
+    }
+  }
+}
