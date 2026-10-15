@@ -131,3 +131,62 @@ async function loadNotes() {
 }
 
 loadBtn.addEventListener("click", loadNotes);
+
+/* ---------- POST: create a note ---------- */
+
+const noteForm = document.getElementById("note-form");
+const titleInput = document.getElementById("title-input");
+const bodyInput = document.getElementById("body-input");
+const MAX_TITLE_LENGTH = 100;
+
+// Returns an error message, or an empty string when the title is valid.
+function validateTitle(title) {
+  if (title.length === 0) {
+    return "Please enter a title for your note.";
+  }
+  if (title.length > MAX_TITLE_LENGTH) {
+    return `The title is too long (${title.length} characters). Please use ${MAX_TITLE_LENGTH} or fewer.`;
+  }
+  return "";
+}
+
+async function postNote(note) {
+  return request(API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json; charset=UTF-8" },
+    body: JSON.stringify(note),
+  });
+}
+
+async function createNote(event) {
+  event.preventDefault();
+
+  const title = titleInput.value.trim();
+  const body = bodyInput.value.trim(); // the body is optional
+
+  const validationError = validateTitle(title);
+  if (validationError) {
+    setStatus(validationError, "error");
+    titleInput.focus();
+    return;
+  }
+
+  setBusy(true);
+  setStatus("Creating note...", "loading");
+
+  try {
+    const { data, status } = await postNote({ title, body, userId: 1 });
+
+    removeEmptyState();
+    notesList.prepend(renderNote(data)); // newest note goes to the top
+    noteForm.reset();
+    setStatus(`Note created (status ${status}, id ${data.id}).`, "success");
+  } catch (error) {
+    // The form is NOT cleared on failure, so the user does not lose their text.
+    setStatus(friendlyError(error, "create the note"), "error");
+  } finally {
+    setBusy(false);
+  }
+}
+
+noteForm.addEventListener("submit", createNote);
