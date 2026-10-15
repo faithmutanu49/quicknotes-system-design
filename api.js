@@ -2,7 +2,8 @@
  * QuickNotes API client
  * Talks to the JSONPlaceholder practice API (https://jsonplaceholder.typicode.com).
  * All user-supplied or server-supplied text is inserted with textContent only,
- * never innerHTML, so it cannot inject markup or scripts into the page.
+ * so it is always treated as plain text and can never inject markup or scripts
+ * into the page.
  */
 
 const API_URL = "https://jsonplaceholder.typicode.com/posts";
